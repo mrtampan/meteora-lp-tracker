@@ -55,8 +55,7 @@ node src/cli.js test      # tes koneksi Telegram
 npm start
 ```
 
-Atau (disarankan) lewat PM2 dengan `ecosystem.config.cjs` yang sudah disiapkan —
-menjalankan tracker **dan** laporan pagi sekaligus:
+Atau (disarankan) lewat PM2 dengan `ecosystem.config.cjs` yang sudah disiapkan:
 
 ```sh
 pm2 start ecosystem.config.cjs
@@ -66,24 +65,6 @@ pm2 logs meteora-lp-tracker
 
 `pm2 save` wajib supaya proses hidup lagi setelah server reboot
 (aktifkan dulu auto-start sekali dengan `pm2 startup`).
-
-## Laporan pagi (07:00 WIB)
-
-`src/morning-summary.mjs` merangkum aktivitas DLMM 24 jam terakhir dari semua
-smart wallet, lalu mengirim satu pesan ke Telegram: token apa, berapa kali add,
-berapa kali close, wallet mana saja, dan transaksi terakhirnya.
-
-Jadwalnya diatur PM2 lewat `cron_restart`, bukan cron sistem. Jam target selalu
-**07:00 WIB** — `ecosystem.config.cjs` menghitung ulang jam menurut timezone
-server, jadi tidak perlu diubah saat pindah server (mis. server UTC+8 → cron
-PM2 menjadi `0 8 * * *`).
-
-```sh
-pm2 restart meteora-morning-report   # jalankan sekali sekarang (uji)
-pm2 logs meteora-morning-report      # cek hasilnya
-npm run report                       # jalankan manual tanpa PM2
-REPORT_HOUR_WIB=6 pm2 restart ecosystem.config.cjs   # ubah jam jadi 06:00 WIB
-```
 
 ## Perintah bot Telegram
 
@@ -122,13 +103,12 @@ src/
   position-list.js  # satu-satunya pengelola state.json (posisi hari ini)
   telegram.js       # format pesan, kirim, listener /list & /deletelist
   tracker.js        # subscribe onLogs, backfill, queue, valuasi
-  morning-summary.mjs # laporan pagi 24 jam (dijadwalkan PM2)
   index.js          # entry point tracker
   cli.js            # command line
 scripts/
   patch-anchor.js   # fix ESM import @meteora-ag/dlmm (dijalankan saat install)
   deploy.sh         # setup satu perintah di server baru
-ecosystem.config.cjs # definisi PM2: tracker + laporan pagi
+ecosystem.config.cjs # definisi PM2 tracker
 test/                # skrip verifikasi decoder & pipeline
 ```
 

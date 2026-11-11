@@ -68,5 +68,4 @@ fi
 echo
 pm2 list
 echo
-echo "Selesai. Log: pm2 logs meteora-lp-tracker / pm2 logs meteora-morning-report"
-echo "Uji laporan pagi sekarang: pm2 restart meteora-morning-report"
+echo "Selesai. Log: pm2 logs meteora-lp-tracker"

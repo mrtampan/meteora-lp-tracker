@@ -2,6 +2,7 @@ import { LpTracker } from './tracker.js';
 import { config } from './config.js';
 import { listWallets } from './wallets.js';
 import { telegramEnabled, listenCommands } from './telegram.js';
+import { startMorningReportScheduler } from './morning-summary.mjs';
 
 async function main() {
   console.log('=== Meteora LP Smart Wallet Tracker ===');
@@ -22,11 +23,19 @@ async function main() {
   const tracker = new LpTracker();
   await tracker.start();
 
+  // Jadwalkan laporan pagi otomatis di dalam proses tracker (hemat memori PM2)
+  const reportScheduler = startMorningReportScheduler({
+    conn: tracker.conn,
+    hourWib: config.reportHourWib,
+    minuteWib: config.reportMinute,
+  });
+
   console.log(`Telegram: siap | minDepositUsd=${config.minDepositUsd} | backfill=${config.backfillMinutes}m`);
   console.log('Menunggu event add/close liquidity...');
 
   const shutdown = async (sig) => {
     console.log(`\n[${sig}] berhenti...`);
+    reportScheduler.stop();
     await tracker.stop();
     process.exit(0);
   };

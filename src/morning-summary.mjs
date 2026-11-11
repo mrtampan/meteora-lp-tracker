@@ -168,37 +168,145 @@ async function sendTelegram(text) {
   const base = telegramBase();
   if (!base) return console.warn('[morning-summary] Telegram token/chatId belum diset — skip pengiriman.');
   const url = `https://api.telegram.org/bot${base.token}/sendMessage`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: base.chatId,
-      text,
-      // Teks biasa: label token sering mengandung _ * ` yang bikin Markdown gagal parse.
-      disable_web_page_preview: true,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Telegram API ${res.status}: ${body.slice(0, 200)}`);
+
+  // Pecah jika melebihi batas 4000 karakter Telegram
+  const chunks = [];
+  if (text.length <= 4000) {
+    chunks.push(text);
+  } else {
+    const lines = text.split('\n');
+    let current = '';
+    for (const line of lines) {
+      if ((current + '\n' + line).length > 4000) {
+        if (current) chunks.push(current);
+        current = line;
+      } else {
+        current = current ? `${current}\n${line}` : line;
+      }
+    }
+    if (current) chunks.push(current);
   }
-  const json = await res.json();
-  if ((json.result || json.error)?.message) console.log(`[morning-summary] Telegram: ${json.result?.message_id ? 'OK' : json.error?.message}`);
+
+  for (const chunk of chunks) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: base.chatId,
+        text: chunk,
+        // Teks biasa: label token sering mengandung _ * ` yang bikin Markdown gagal parse.
+        disable_web_page_preview: true,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Telegram API ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    if ((json.result || json.error)?.message) {
+      console.log(`[morning-summary] Telegram: ${json.result?.message_id ? 'OK' : json.error?.message}`);
+    }
+  }
 }
 
-async function main() {
-  console.log('[morning-summary] memulai ringkasan token Meteora…');
-  const conn = await fetchConnection();
-  const coder = await getCoder(conn);
-  const nowMs = Date.now();
-  const buckets = await walletsInWindow(conn, coder, nowMs);
-  const text = buildSummary(buckets);
-  console.log(text);
-  await sendTelegram(text);
-  console.log('[morning-summary] selesai');
+let isRunning = false;
+
+export function isReportRunning() {
+  return isRunning;
 }
 
-// Jalankan hanya bila dieksekusi langsung, bukan saat di-import untuk test.
+export async function runMorningReport(existingConn = null) {
+  if (isRunning) {
+    console.log('[morning-summary] Laporan sedang berjalan, abaikan panggilan ganda.');
+    return null;
+  }
+  isRunning = true;
+  try {
+    console.log('[morning-summary] memulai ringkasan token Meteora…');
+    const conn = existingConn || await fetchConnection();
+    const coder = await getCoder(conn);
+    const nowMs = Date.now();
+    const buckets = await walletsInWindow(conn, coder, nowMs);
+    const text = buildSummary(buckets);
+    console.log(text);
+    await sendTelegram(text);
+    console.log('[morning-summary] selesai');
+    return text;
+  } finally {
+    isRunning = false;
+  }
+}
+
+// Hitung jeda (ms) menuju jam laporan berikutnya dalam WIB (UTC+7).
+export function getNextReportDelayMs(hourWib = 7, minuteWib = 0, baseDate = new Date()) {
+  const nowMs = baseDate.getTime();
+  const nowWibMs = nowMs + 7 * 3600_000;
+  const nowWib = new Date(nowWibMs);
+
+  const targetWib = new Date(nowWibMs);
+  targetWib.setUTCHours(hourWib, minuteWib, 0, 0);
+
+  // Jika target waktu hari ini sudah lewat atau tinggal <= 1 detik, jadwalkan besok
+  if (targetWib.getTime() - nowWib.getTime() <= 1000) {
+    targetWib.setUTCDate(targetWib.getUTCDate() + 1);
+  }
+
+  // Tambah buffer 1 detik agar saat timer selesai, waktu sistem sudah melewati menit target
+  return Math.max(1000, targetWib.getTime() - nowWib.getTime() + 1000);
+}
+
+// Menjalankan scheduler di dalam proses utama tracker.
+export function startMorningReportScheduler({
+  conn = null,
+  hourWib = config.reportHourWib ?? 7,
+  minuteWib = config.reportMinute ?? 0,
+} = {}) {
+  let timer = null;
+  let stopped = false;
+
+  const scheduleNext = () => {
+    if (stopped) return;
+    const delayMs = getNextReportDelayMs(hourWib, minuteWib);
+    const nextDate = new Date(Date.now() + delayMs);
+    const totalSec = Math.round(delayMs / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+
+    console.log(
+      `[morning-report] Laporan berikutnya: ${fmtDateTime(nextDate.getTime())} (dalam ${hours}j ${minutes}m)`
+    );
+
+    timer = setTimeout(async () => {
+      if (stopped) return;
+      console.log(`[morning-report] Memulai laporan pagi otomatis (${fmtDateTime(Date.now())})...`);
+      try {
+        await runMorningReport(conn);
+      } catch (err) {
+        console.error('[morning-report] Gagal menjalankan laporan pagi:', err?.message || err);
+      } finally {
+        scheduleNext();
+      }
+    }, delayMs);
+  };
+
+  scheduleNext();
+
+  return {
+    stop() {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      console.log('[morning-report] Scheduler laporan pagi dihentikan.');
+    },
+    runNow() {
+      return runMorningReport(conn);
+    },
+  };
+}
+
+// Jalankan hanya bila dieksekusi langsung, bukan saat di-import untuk test/tracker.
 // Catatan: di bawah PM2 (fork mode) process.argv[1] adalah ProcessContainerFork.js,
 // path script asli ada di env pm_exec_path.
 function invokedDirectly() {
@@ -212,7 +320,7 @@ function invokedDirectly() {
 }
 
 if (invokedDirectly()) {
-  main().catch(err => {
+  runMorningReport().catch(err => {
     console.error('[morning-summary] gagal:', err?.message || err);
     process.exit(1);
   });

@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { readState, resetTodayList } from './position-list.js';
+import { runMorningReport, isReportRunning } from './morning-summary.mjs';
 
 const MAX_LEN = 4000;
 
@@ -188,6 +189,25 @@ export async function handleCommand(msg) {
       return sendHtml(`<b>⚠️ Gagal Reset</b>\n\nMasih ada ${remaining} posisi di list, Bos.`);
     }
     return sendHtml('<b>🧹 List Posisi Reset</b>\n\nList posisi berhasil di-reset, Bos. Total: 0.');
+  }
+
+  // /report atau /summary — kirim ringkasan token 24 jam sekarang
+  if (
+    text === '/report' ||
+    text === '/report@' + (msg.bot?.username || '') ||
+    text === '/summary' ||
+    text === '/summary@' + (msg.bot?.username || '')
+  ) {
+    if (isReportRunning()) {
+      return sendHtml('⏳ Laporan sedang diproses, mohon tunggu sebentar...');
+    }
+    await sendHtml('⏳ Menyiapkan ringkasan token Meteora 24 jam terakhir...');
+    try {
+      await runMorningReport();
+    } catch (e) {
+      await sendHtml(`⚠️ Gagal membuat ringkasan: ${esc(e.message)}`);
+    }
+    return;
   }
 }
 

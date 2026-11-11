@@ -33,6 +33,9 @@ export const config = {
   minDepositUsd: num(process.env.MIN_DEPOSIT_USD ?? fileConfig.minDepositUsd, 0),
   // How far back to backfill on startup (minutes)
   backfillMinutes: num(process.env.BACKFILL_MINUTES ?? fileConfig.backfillMinutes, 10),
+  // Jam & menit laporan pagi (WIB / UTC+7, default: 07:00 WIB)
+  reportHourWib: num(process.env.REPORT_HOUR_WIB ?? fileConfig.reportHourWib, 7),
+  reportMinute: num(process.env.REPORT_MINUTE ?? fileConfig.reportMinute, 0),
   jupiterApiKey: process.env.JUPITER_API_KEY || fileConfig.jupiterApiKey || '',
   // Basis URL tautan "Lihat di LP Agent" di pesan Telegram.
   lpagent: {
