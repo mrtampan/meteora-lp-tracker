@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# secrets & data lokal (jangan ikut ter-upload)
+.env
+state.json
+state.json.tmp
+logs/
+wallets.json
+
+# artefak
+*.log
+.DS_Store

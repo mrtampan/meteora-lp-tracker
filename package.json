@@ -1,0 +1,25 @@
+{
+  "name": "meteora-lp-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Track smart wallets adding/closing Meteora DLMM liquidity, notify Telegram",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "report": "node src/morning-summary.mjs",
+    "wallets": "node src/cli.js wallets",
+    "test": "node src/cli.js test",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "deploy": "bash scripts/deploy.sh",
+    "postinstall": "node scripts/patch-anchor.js"
+  },
+  "dependencies": {
+    "@meteora-ag/dlmm": "1.9.4",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^5.0.0",
+    "dotenv": "^17.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
